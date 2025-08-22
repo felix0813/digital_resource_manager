@@ -1,8 +1,8 @@
 // lib/ui/login/login_page.dart
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:basic_utils/basic_utils.dart';
 import 'package:flutter/material.dart';
@@ -136,9 +136,10 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
-  void _initializeDeviceInfo() async {
-    _logger.info('开始初始化设备信息');
+    void _initializeDeviceInfo() async {
+  _logger.info('开始初始化设备信息');
 
+  try {
     // 获取或生成设备ID
     _deviceID = await _getOrCreateDeviceID();
     _logger.info('设备ID: $_deviceID');
@@ -153,6 +154,14 @@ class _LoginPageState extends State<LoginPage> {
 
     // 获取或生成RSA密钥对
     await _getOrCreateKeyPair();
+  } catch (e, stackTrace) {
+    _logger.severe('初始化设备信息失败: $e', e, stackTrace);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('初始化失败，请重新启动应用')),
+      );
+    }
+  } finally {
     // 初始化完成后更新状态
     if (mounted) {
       setState(() {
@@ -161,6 +170,61 @@ class _LoginPageState extends State<LoginPage> {
     }
     _logger.info('设备信息初始化完成');
   }
+}
+
+
+Future<void> _getOrCreateKeyPair() async {
+  _logger.info('获取或创建RSA密钥对');
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  String? publicKey = prefs.getString('public_key');
+  String? privateKey = prefs.getString('private_key');
+
+  if (publicKey == null ||
+      publicKey.isEmpty ||
+      privateKey == null ||
+      privateKey.isEmpty) {
+    _logger.info('未找到现有密钥对，生成新的RSA密钥对');
+
+    try {
+      // 在 isolate 中生成RSA密钥对，避免阻塞UI线程
+      // 对于Web平台，使用较小的密钥长度以减少计算时间
+      const keySize = kIsWeb ? 1024 : 2048;
+
+      // 显示加载提示
+      if (mounted) {
+        setState(() {
+          _isInitializing = true;
+        });
+      }
+
+      // 使用异步延迟确保UI更新
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final keyPair = await compute(_generateRSAKeyPairHelper, keySize);
+
+      // 将公钥和私钥转换为PEM格式
+      _publicKey = CryptoUtils.encodeRSAPublicKeyToPem(
+          keyPair.publicKey);
+      _privateKey = CryptoUtils.encodeRSAPrivateKeyToPem(
+          keyPair.privateKey);
+
+      // 保存到本地存储
+      await prefs.setString('public_key', _publicKey);
+      await prefs.setString('private_key', _privateKey);
+      _logger.info('新密钥对已生成并保存');
+    } catch (e, stackTrace) {
+      _logger.severe('生成密钥对失败: $e', e, stackTrace);
+      rethrow;
+    }
+  } else {
+    // 使用已存在的密钥对
+    _publicKey = publicKey;
+    _privateKey = privateKey;
+    _logger.info('使用现有密钥对');
+  }
+}
+
+
 
   Future<String> _getOrCreateDeviceID() async {
     _logger.info('获取或创建设备ID');
@@ -239,38 +303,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 
 
-    Future<void> _getOrCreateKeyPair() async {
-    _logger.info('获取或创建RSA密钥对');
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? publicKey = prefs.getString('public_key');
-    String? privateKey = prefs.getString('private_key');
-
-    if (publicKey == null ||
-        publicKey.isEmpty ||
-        privateKey == null ||
-        privateKey.isEmpty) {
-      _logger.info('未找到现有密钥对，生成新的RSA密钥对');
-
-      // 在 isolate 中生成RSA密钥对，避免阻塞UI线程
-      final keyPair = await compute(_generateRSAKeyPairHelper, kIsWeb ? 1024 : 2048);
-
-      // 将公钥和私钥转换为PEM格式
-      _publicKey = CryptoUtils.encodeRSAPublicKeyToPem(
-          keyPair.publicKey);
-      _privateKey = CryptoUtils.encodeRSAPrivateKeyToPem(
-          keyPair.privateKey);
-
-      // 保存到本地存储
-      await prefs.setString('public_key', _publicKey);
-      await prefs.setString('private_key', _privateKey);
-      _logger.info('新密钥对已生成并保存');
-    } else {
-      // 使用已存在的密钥对
-      _publicKey = publicKey;
-      _privateKey = privateKey;
-      _logger.info('使用现有密钥对');
-    }
-  }
 
   // 添加一个静态辅助方法，用于在 isolate 中执行
   static AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey> _generateRSAKeyPairHelper(int keySize) {
@@ -293,31 +325,6 @@ class _LoginPageState extends State<LoginPage> {
     // 生成密钥对
     return keyGenerator.generateKeyPair();
   }
-
-  AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey> _generateRSAKeyPair() {
-    _logger.info('开始生成RSA密钥对');
-    // 创建随机数生成器
-    final secureRandom = FortunaRandom();
-    final random = Random.secure();
-    final seeds = <int>[];
-    for (int i = 0; i < 32; i++) {
-      seeds.add(random.nextInt(255));
-    }
-    secureRandom.seed(KeyParameter(Uint8List.fromList(seeds)));
-
-    // 配置RSA密钥生成参数
-    final keyGenerator = RSAKeyGenerator();
-    keyGenerator.init(ParametersWithRandom(
-      RSAKeyGeneratorParameters(BigInt.from(65537), kIsWeb ? 1024 : 2048, 64),
-      secureRandom,
-    ));
-
-    // 生成密钥对
-    final keyPair = keyGenerator.generateKeyPair();
-    _logger.info('RSA密钥对生成完成');
-    return keyPair;
-  }
-
 
   @override
   void dispose() {
