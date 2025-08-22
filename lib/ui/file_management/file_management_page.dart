@@ -5,7 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import '../../logic/file_service.dart';
-import '../../models/file_item.dart';
+import '../../models/file_item.dart'; // 修改导入
 
 class FileManagementPage extends StatelessWidget {
   const FileManagementPage({super.key});
@@ -25,7 +25,7 @@ class FileManagementView extends StatefulWidget {
 
 class _FileManagementViewState extends State<FileManagementView> {
   late FileService _fileService;
-  List<FileItem> _files = [];
+  List<FileWithVersions> _files = []; // 修改类型
   bool _isLoading = false;
   String _errorMessage = '';
 
@@ -43,7 +43,8 @@ class _FileManagementViewState extends State<FileManagementView> {
     });
 
     try {
-      final files = await _fileService.listBucketObjectsWithAuth();
+      // 使用新的方法获取文件和版本信息
+      final files = await _fileService.listFilesWithVersionsWithAuth();
       if (files != null) {
         setState(() {
           _files = files;
@@ -93,55 +94,51 @@ class _FileManagementViewState extends State<FileManagementView> {
     }
   }
 
-  Future<void> _downloadFile(FileItem file) async {
-  try {
-    final response = await _fileService.downloadFileWithAuth(file.name);
-    if (response != null && response.statusCode == 200) {
-      // 获取平台特定的下载目录
-      final downloadDir = await _getDownloadDirectory();
-      if (downloadDir != null) {
-        // 使用path.join创建ResourceManager子目录路径
-        final resourceManagerDirPath = path.join(downloadDir.path, 'ResourceManager');
-        final resourceManagerDir = Directory(resourceManagerDirPath);
+  Future<void> _downloadFile(FileWithVersions file) async {
+    try {
+      // 下载最新版本
+      final response = await _fileService.downloadFileWithAuth(file.objectName);
+      if (response != null && response.statusCode == 200) {
+        final downloadDir = await _getDownloadDirectory();
+        if (downloadDir != null) {
+          final resourceManagerDirPath = path.join(downloadDir.path, 'ResourceManager');
+          final resourceManagerDir = Directory(resourceManagerDirPath);
 
-        if (!await resourceManagerDir.exists()) {
-          await resourceManagerDir.create(recursive: true);
+          if (!await resourceManagerDir.exists()) {
+            await resourceManagerDir.create(recursive: true);
+          }
+
+          final filePath = path.join(resourceManagerDir.path, file.objectName);
+          final fileToSave = File(filePath);
+
+          await fileToSave.writeAsBytes(response.bodyBytes);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('文件已保存到: $filePath')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法获取下载目录')),
+          );
         }
-
-        // 使用path.join创建文件路径
-        final filePath = path.join(resourceManagerDir.path, file.name);
-        final fileToSave = File(filePath);
-
-        // 写入文件内容
-        await fileToSave.writeAsBytes(response.bodyBytes);
-
+      } else if (response != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('文件已保存到: $filePath')),
+          SnackBar(content: Text('下载失败: ${response.body}')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法获取下载目录')),
+          const SnackBar(content: Text('下载失败')),
         );
       }
-    } else if (response != null) {
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('下载失败: ${response.body}')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('下载失败')),
+        SnackBar(content: Text('下载出错: $e')),
       );
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('下载出错: $e')),
-    );
   }
-}
 
   Future<Directory?> _getDownloadDirectory() async {
     try {
-      // 使用 path_provider 提供的 getDownloadsDirectory 方法
       return await getDownloadsDirectory();
     } catch (e) {
       debugPrint('获取下载目录时出错: $e');
@@ -149,13 +146,13 @@ class _FileManagementViewState extends State<FileManagementView> {
     }
   }
 
-  Future<void> _deleteFile(FileItem file) async {
+  Future<void> _deleteFile(FileWithVersions file) async {
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('确认删除'),
-          content: Text('确定要删除文件 "${file.name}" 吗？'),
+          content: Text('确定要删除文件 "${file.objectName}" 吗？\n这将删除所有版本。'),
           actions: <Widget>[
             TextButton(
               child: const Text('取消'),
@@ -172,7 +169,7 @@ class _FileManagementViewState extends State<FileManagementView> {
 
     if (confirm == true) {
       try {
-        final response = await _fileService.deleteFileWithAuth(file.name);
+        final response = await _fileService.deleteFileWithAuth(file.objectName);
         if (response != null && response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('文件删除成功')),
@@ -195,41 +192,128 @@ class _FileManagementViewState extends State<FileManagementView> {
     }
   }
 
-  Future<void> _showFileVersions(FileItem file) async {
-    try {
-      final response = await _fileService.listFileVersionsWithAuth(file.name);
-      if (response != null && response.statusCode == 200) {
-        // 解析版本信息并在对话框中显示
-        // 这里简化处理，实际应用中需要解析返回的版本数据
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Text('${file.name} 的版本'),
-              content: Text(response.body),
-              actions: <Widget>[
-                TextButton(
-                  child: const Text('关闭'),
-                  onPressed: () => Navigator.of(context).pop(),
+  Future<void> _showFileVersions(FileWithVersions file) async {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.6,
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${file.objectName} 的版本',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text('共 ${file.versions.length} 个版本'),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: file.versions.length,
+                  itemBuilder: (context, index) {
+                    final version = file.versions[index];
+                    final isLatest = version.versionId == file.latestVersion;
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        title: Text(
+                          version.versionId,
+                          style: TextStyle(
+                            fontWeight: isLatest ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('大小: ${version.size} 字节'),
+                            Text('时间: ${version.timestamp}'),
+                            if (isLatest)
+                              const Text(
+                                '最新版本',
+                                style: TextStyle(color: Colors.green),
+                              ),
+                          ],
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () async {
+                            try {
+                              final response = await _fileService.downloadFileWithAuth(
+                                file.objectName,
+                                versionId: version.versionId,
+                              );
+                              if (response != null && response.statusCode == 200) {
+                                final downloadDir = await _getDownloadDirectory();
+                                if (downloadDir != null) {
+                                  final resourceManagerDirPath = path.join(
+                                    downloadDir.path,
+                                    'ResourceManager',
+                                  );
+                                  final resourceManagerDir = Directory(resourceManagerDirPath);
+
+                                  if (!await resourceManagerDir.exists()) {
+                                    await resourceManagerDir.create(recursive: true);
+                                  }
+
+                                  // 为版本文件添加版本ID后缀
+                                  final fileNameWithoutExt = path.basenameWithoutExtension(file.objectName);
+                                  final fileExt = path.extension(file.objectName);
+                                  final versionFileName =
+                                      '$fileNameWithoutExt-v${version.versionId}$fileExt';
+
+                                  final filePath = path.join(resourceManagerDir.path, versionFileName);
+                                  final fileToSave = File(filePath);
+
+                                  await fileToSave.writeAsBytes(response.bodyBytes);
+
+                                  if (context.mounted) {
+                                    Navigator.of(context).pop();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('文件已保存到: $filePath')),
+                                    );
+                                  }
+                                }
+                              } else if (response != null) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('下载失败: ${response.body}')),
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('下载出错: $e')),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text('下载'),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ],
-            );
-          },
+              ),
+            ],
+          ),
         );
-      } else if (response != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('获取版本信息失败: ${response.body}')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('获取版本信息失败')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('获取版本信息出错: $e')),
-      );
-    }
+      },
+    );
   }
 
   @override
@@ -293,45 +377,56 @@ class _FileManagementViewState extends State<FileManagementView> {
         final file = _files[index];
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 4),
-          child: ListTile(
-            title: Text(file.name),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('大小: ${file.size} 字节'),
-                Text('版本ID: ${file.versionId ?? "N/A"}'),
-                Text('更新时间: ${file.lastModified?.toString() ?? "N/A"}'),
-              ],
-            ),
-            trailing: PopupMenuButton<String>(
-              onSelected: (String action) {
-                switch (action) {
-                  case 'download':
-                    _downloadFile(file);
-                    break;
-                  case 'versions':
-                    _showFileVersions(file);
-                    break;
-                  case 'delete':
-                    _deleteFile(file);
-                    break;
-                }
-              },
-              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                const PopupMenuItem<String>(
-                  value: 'download',
-                  child: Text('下载'),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'versions',
-                  child: Text('查看版本'),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: Text('删除'),
-                ),
-              ],
-            ),
+          child: ExpansionTile(
+            title: Text(file.objectName),
+            subtitle: Text('版本数: ${file.versions.length}'),
+            childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('大小: ${file.size} 字节'),
+                        Text('最新版本: ${file.latestVersion}'),
+                        Text('更新时间: ${file.timestamp}'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (String action) {
+                      switch (action) {
+                        case 'download':
+                          _downloadFile(file);
+                          break;
+                        case 'versions':
+                          _showFileVersions(file);
+                          break;
+                        case 'delete':
+                          _deleteFile(file);
+                          break;
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'download',
+                        child: Text('下载最新版本'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'versions',
+                        child: Text('查看所有版本'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text('删除所有版本'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ),
         );
       },

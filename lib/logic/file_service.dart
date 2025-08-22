@@ -41,41 +41,6 @@ class FileService {
     return response;
   }
 
-  Future<http.Response> listFileVersions(String objectName, String token) async {
-    final uri = Uri.parse('$baseUrl/versions')
-        .replace(queryParameters: {
-          'object_name': objectName,
-        });
-
-    final response = await http.get(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
-    );
-    return response;
-  }
-
-  Future<List<FileItem>> listBucketObjects(String token) async {
-    final url = Uri.parse('$baseUrl/list');
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-      final List<dynamic> objects = data['objects'] as List<dynamic>;
-      return objects
-          .map((e) => FileItem.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } else {
-      throw Exception(
-          'Failed to load files: ${response.statusCode} - ${response.body}');
-    }
-  }
 
   Future<http.Response> deleteFile(String objectName, String token, {String? versionId}) async {
     final uri = Uri.parse('$baseUrl/delete')
@@ -111,21 +76,38 @@ class FileService {
     );
   }
 
-  Future<http.Response?> listFileVersionsWithAuth(String objectName) {
-    return _authService.makeAuthenticatedRequest<http.Response>(
-      (token) => listFileVersions(objectName, token),
-    );
-  }
-
-  Future<List<FileItem>?> listBucketObjectsWithAuth() {
-    return _authService.makeAuthenticatedRequest<List<FileItem>>(
-      (token) => listBucketObjects(token),
-    );
-  }
-
   Future<http.Response?> deleteFileWithAuth(String objectName, {String? versionId}) {
     return _authService.makeAuthenticatedRequest<http.Response>(
       (token) => deleteFile(objectName, token, versionId: versionId),
     );
   }
+
+  Future<List<FileWithVersions>> listFilesWithVersions(String token) async {
+    final url = Uri.parse('$baseUrl/list');
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      final List<dynamic> objects = data['files'] as List<dynamic>;
+      return objects
+          .map((e) => FileWithVersions.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } else {
+      throw Exception(
+          'Failed to load files with versions: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+// 添加对应的认证版本方法
+  Future<List<FileWithVersions>?> listFilesWithVersionsWithAuth() {
+    return _authService.makeAuthenticatedRequest<List<FileWithVersions>>(
+          (token) => listFilesWithVersions(token),
+    );
+  }
 }
+
