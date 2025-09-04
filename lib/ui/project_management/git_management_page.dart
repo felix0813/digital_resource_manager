@@ -2,9 +2,45 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import '../../models/git_project.dart';
+
 import '../../logic/git_project_service.dart';
+import '../../models/git_project.dart';
 import 'git_project_form_dialog.dart';
+
+// 添加一个用于显示详细信息的小部件
+class _DetailRow extends StatelessWidget {
+  final String title;
+  final String content;
+
+  const _DetailRow({
+    required this.title,
+    required this.content,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 2),
+          SelectableText(
+            content,
+            style: const TextStyle(fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class GitManagementPage extends StatefulWidget {
   const GitManagementPage({super.key});
@@ -158,6 +194,51 @@ class _GitManagementPageState extends State<GitManagementPage> {
     );
   }
 
+  // 在 _GitManagementPageState 类中添加新的展示信息方法
+  void _showProjectDetails(GitProject project) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(project.name),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _DetailRow(title: '项目名称', content: project.name),
+                _DetailRow(title: '项目URL', content: project.url),
+                _DetailRow(
+                    title: '项目描述',
+                    content: project.description.isEmpty
+                        ? '无'
+                        : project.description),
+                _DetailRow(
+                    title: '项目创建时间',
+                    content: project.createdAt.toString().split(".")[0]),
+                _DetailRow(
+                    title: '项目更新时间',
+                    content: project.updatedAt.toString().split(".")[0]),
+                // 根据privateKey是否存在来决定是否显示
+                if (project.privateKey.isNotEmpty)
+                  _DetailRow(title: '项目SSH密钥', content: project.privateKey),
+                // 根据accessToken是否存在来决定是否显示
+                if (project.accessToken.isNotEmpty)
+                  _DetailRow(title: '项目访问令牌', content: project.accessToken),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -228,9 +309,20 @@ class _GitManagementPageState extends State<GitManagementPage> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  project.description,
+                                  project.description.isEmpty?'缺少项目描述':project.description,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '创建时间: ${project.createdAt.toString().split(".")[0]}',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey),
+                                ),
+                                Text(
+                                  '更新时间: ${project.updatedAt.toString().split(".")[0]}',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey),
                                 ),
                               ],
                             ),
@@ -247,7 +339,7 @@ class _GitManagementPageState extends State<GitManagementPage> {
                                 ),
                               ],
                             ),
-                            onTap: () => _showProjectForm(project),
+                            onTap: () => _showProjectDetails(project),
                           ),
                         );
                       },
