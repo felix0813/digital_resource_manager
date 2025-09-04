@@ -1,7 +1,7 @@
 import 'package:digital_resource_manager/ui/file_management/file_management_page.dart';
 import 'package:digital_resource_manager/ui/login/login_page.dart';
 import 'package:digital_resource_manager/ui/password_management/password_management_page.dart';
-import 'package:digital_resource_manager/ui/project_management/project_management_page.dart';
+import 'package:digital_resource_manager/ui/project_management/git_management_page.dart';
 import 'package:digital_resource_manager/ui/register/register_page.dart';
 import 'package:digital_resource_manager/ui/setting/setting_page.dart';
 import 'package:flutter/material.dart';
@@ -61,7 +61,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final List<Widget> _pages = [
     const PasswordManagementPage(),
     const FileManagementPage(),
-    const ProjectManagementPage(),
+    const GitManagementPage(),
     const SettingPage()
   ];
 
