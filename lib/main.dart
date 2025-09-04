@@ -5,11 +5,25 @@ import 'package:digital_resource_manager/ui/project_management/project_managemen
 import 'package:digital_resource_manager/ui/register/register_page.dart';
 import 'package:digital_resource_manager/ui/setting/setting_page.dart';
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 
 void main() {
-  runApp(const MyApp());
+  // 配置日志
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    print('${record.level.name}: ${record.time}: ${record.loggerName}: ${record
+        .message}');
+    if (record.error != null) {
+      print('${record.level.name}: ${record.time}: ${record
+          .loggerName}: 错误详情: ${record.error}');
+    }
+    if (record.stackTrace != null) {
+      print('${record.level.name}: ${record.time}: ${record
+          .loggerName}: 堆栈跟踪:\n${record.stackTrace}');
+    }
+  });
+  runApp(MyApp());
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 

@@ -10,6 +10,11 @@ class Environment {
     defaultValue: 'http://localhost:8082',
   );
 
+  static const String pwdServiceBaseUrl = String.fromEnvironment(
+    'PWD_SERVICE_BASE_URL',
+    defaultValue: 'http://localhost:8080',
+  );
+
   static const String registerEndpoint = '/register';
   static const String loginEndpoint = '/login';
   static const String storageEndpoint = '/storage';
