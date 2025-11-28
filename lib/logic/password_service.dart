@@ -49,6 +49,19 @@ class PasswordService {
     return response;
   }
 
+  Future<http.Response> updatePasswordMeta(PasswordItem password, String token) async {
+    final url = Uri.parse('$baseUrl/passwords/${password.id}/meta');
+    final response = await http.put(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode(password.toJson()),
+    );
+    return response;
+  }
+
   // 删除密码
   Future<http.Response> deletePassword(int id, String token) async {
     final url = Uri.parse('$baseUrl/passwords/$id');
@@ -103,6 +116,11 @@ class PasswordService {
   Future<http.Response?> updatePasswordWithAuth(PasswordItem password) {
     return _authService.makeAuthenticatedRequest<http.Response>(
       (token) => updatePassword(password, token),
+    );
+  }
+  Future<http.Response?> updatePasswordMetaWithAuth(PasswordItem password) {
+    return _authService.makeAuthenticatedRequest<http.Response>(
+          (token) => updatePasswordMeta(password, token),
     );
   }
 

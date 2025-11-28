@@ -104,38 +104,45 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
   }
 
   // 更新密码
-  Future<bool> _updatePassword(PasswordItem password) async {
-    _logger.info('开始更新密码，ID: ${password.id}, 网站: ${password.website}, 用户名: ${password.userName}');
-    try {
-      final response = await _passwordService.updatePasswordWithAuth(password);
-      if (response != null) {
-        _logger.info('收到更新密码响应，状态码: ${response.statusCode}');
-        if (response.statusCode == 200) {
-          _logger.info('密码更新成功');
-          _loadPasswords(); // 重新加载列表
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('密码更新成功')),
-          );
-          return true;
+  Future<bool> _updatePassword(PasswordItem password,bool updatePassword) async {
+      _logger.info(
+          '开始更新密码，ID: ${password.id}, 网站: ${password.website}, 用户名: ${password.userName}');
+      if(!updatePassword){
+        _logger.info("只更新密码元数据");
+      }
+      try {
+        final response =
+            updatePassword?await _passwordService.updatePasswordWithAuth(password):await _passwordService.updatePasswordMetaWithAuth(password);
+        if (response != null) {
+          _logger.info('收到更新密码响应，状态码: ${response.statusCode}');
+          if (response.statusCode == 200) {
+            _logger.info('密码更新成功');
+            _loadPasswords(); // 重新加载列表
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('密码更新成功')),
+            );
+            return true;
+          } else {
+            _logger.warning(
+                '密码更新失败，状态码: ${response.statusCode}, 响应体: ${response.body}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('密码更新失败')),
+            );
+          }
         } else {
-          _logger.warning('密码更新失败，状态码: ${response.statusCode}, 响应体: ${response.body}');
+          _logger.warning('密码更新失败，响应为空');
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('密码更新失败')),
+            const SnackBar(content: Text('更新密码失败')),
           );
         }
-      } else {
-        _logger.warning('密码更新失败，响应为空');
+      } catch (e, stackTrace) {
+        _logger.severe('更新密码时发生异常: $e', e, stackTrace);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('更新密码失败')),
         );
       }
-    } catch (e, stackTrace) {
-      _logger.severe('更新密码时发生异常: $e', e, stackTrace);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('更新密码失败')),
-      );
-    }
-    return false;
+      return false;
+
   }
 
   // 删除密码
@@ -199,6 +206,46 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
     }
     return null;
   }
+  // 弹出“选择修改方式”对话框
+  Future<void> _onEditPassword(BuildContext context, PasswordItem password) async {
+    final mode = await _showPasswordEditModeDialog(context);
+    if (mode == null) return;
+
+    // 根据选择调用编辑弹窗；只修改元数据时 updatePassword = false
+    _showPasswordDialog(
+      password: password,
+      updatePassword: mode,
+    );
+  }
+
+
+// 选择修改方式对话框
+Future<bool?> _showPasswordEditModeDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('选择修改方式'),
+        content: const Text('请选择要执行的修改范围,元数据不包括密码'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('只修改元数据'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('修改全部'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      );
+    },
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +295,7 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
           ),
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () => _showPasswordDialog(password: password),
+            onPressed: () => _onEditPassword(context,password),
           ),
           IconButton(
             icon: const Icon(Icons.delete),
@@ -319,14 +366,14 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
   }
 
   // 显示密码编辑对话框
-  void _showPasswordDialog({PasswordItem? password}) {
+  void _showPasswordDialog({PasswordItem? password,bool? updatePassword}) {
     final isEditing = password != null;
     _logger.info('${isEditing ? '编辑' : '创建'}密码对话框');
     final websiteController = TextEditingController(text: password?.website ?? '');
     final usernameController = TextEditingController(text: password?.userName ?? '');
-    final passwordController = TextEditingController(text: password?.password ?? '');
+    final passwordController = TextEditingController(text: '');
     final descriptionController = TextEditingController(text: password?.description ?? '');
-
+    final showPassword = !(updatePassword ?? false);
     showDialog(
       context: context,
       builder: (context) {
@@ -335,7 +382,7 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: [
+              children: showPassword?[
                 TextField(
                   controller: websiteController,
                   decoration: const InputDecoration(labelText: '网站'),
@@ -347,6 +394,20 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
                 TextField(
                   controller: passwordController,
                   decoration: const InputDecoration(labelText: '密码'),
+                ),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(labelText: '描述'),
+                  maxLines: 3,
+                ),
+              ]:[
+                TextField(
+                  controller: websiteController,
+                  decoration: const InputDecoration(labelText: '网站'),
+                ),
+                TextField(
+                  controller: usernameController,
+                  decoration: const InputDecoration(labelText: '用户名'),
                 ),
                 TextField(
                   controller: descriptionController,
@@ -375,11 +436,20 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
                 );
 
                 if (isEditing) {
-                  _updatePassword(newPassword).then((success){
-                    if (success) {
-                      Navigator.of(context).pop();
-                    }
-                  });
+                  if(showPassword) {
+                    _updatePassword(newPassword,true).then((success) {
+                      if (success) {
+                        Navigator.of(context).pop();
+                      }
+                    });
+                  }
+                  else{
+                    _updatePassword(newPassword,false).then((success) {
+                      if (success) {
+                        Navigator.of(context).pop();
+                      }
+                    });
+                  }
                 } else {
                   _createPassword(newPassword).then((success){
                     if (success) {
