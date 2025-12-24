@@ -21,7 +21,6 @@ class _GitProjectFormDialogState extends State<GitProjectFormDialog> {
   late TextEditingController _nameController;
   late TextEditingController _urlController;
   late TextEditingController _usernameController;
-  late TextEditingController _privateKeyController;
   late TextEditingController _accessTokenController;
   late TextEditingController _descriptionController;
 
@@ -35,7 +34,6 @@ class _GitProjectFormDialogState extends State<GitProjectFormDialog> {
     _nameController = TextEditingController(text: widget.project?.name ?? '');
     _urlController = TextEditingController(text: widget.project?.url ?? '');
     _usernameController = TextEditingController(text: widget.project?.username ?? '');
-    _privateKeyController = TextEditingController(text: widget.project?.privateKey ?? '');
     _accessTokenController = TextEditingController(text: widget.project?.accessToken ?? '');
     _descriptionController = TextEditingController(text: widget.project?.description ?? '');
   }
@@ -45,7 +43,6 @@ class _GitProjectFormDialogState extends State<GitProjectFormDialog> {
     _nameController.dispose();
     _urlController.dispose();
     _usernameController.dispose();
-    _privateKeyController.dispose();
     _accessTokenController.dispose();
     _descriptionController.dispose();
     super.dispose();
@@ -59,7 +56,6 @@ class _GitProjectFormDialogState extends State<GitProjectFormDialog> {
         name: _nameController.text,
         url: _urlController.text,
         username: _usernameController.text,
-        privateKey: _privateKeyController.text,
         accessToken: _accessTokenController.text,
         description: _descriptionController.text,
         createdAt: widget.project?.createdAt ?? DateTime.now(),
@@ -119,14 +115,6 @@ class _GitProjectFormDialogState extends State<GitProjectFormDialog> {
                     labelText: '用户名',
                     hintText: '用于HTTPS认证的用户名',
                   ),
-                ),
-                TextFormField(
-                  controller: _privateKeyController,
-                  decoration: const InputDecoration(
-                    labelText: 'SSH私钥',
-                    hintText: '用于SSH认证的私钥',
-                  ),
-                  maxLines: 3,
                 ),
                 TextFormField(
                   controller: _accessTokenController,

@@ -219,9 +219,6 @@ class _GitManagementPageState extends State<GitManagementPage> {
                 _DetailRow(
                     title: '项目更新时间',
                     content: project.updatedAt.toString().split(".")[0]),
-                // 根据privateKey是否存在来决定是否显示
-                if (project.privateKey.isNotEmpty)
-                  _DetailRow(title: '项目SSH密钥', content: project.privateKey),
                 // 根据accessToken是否存在来决定是否显示
                 if (project.accessToken.isNotEmpty)
                   _DetailRow(title: '项目访问令牌', content: project.accessToken),
