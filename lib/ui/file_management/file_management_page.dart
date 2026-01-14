@@ -1,7 +1,9 @@
 // lib/ui/file_management/file_management_page.dart
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import '../../logic/file_service.dart';
@@ -316,6 +318,170 @@ class _FileManagementViewState extends State<FileManagementView> {
     );
   }
 
+  Future<String> _loadMarkdownContent(FileWithVersions file) async {
+    final response = await _fileService.downloadFileWithAuth(file.objectName);
+    if (response == null) {
+      throw Exception('无法下载文件');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('下载失败: ${response.body}');
+    }
+    return utf8.decode(response.bodyBytes);
+  }
+
+  Future<void> _showMarkdownPreview(FileWithVersions file) async {
+    if (!context.mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        bool hideSource = false;
+        bool hideRender = false;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Expanded(child: Text('Markdown 预览 - ${file.objectName}')),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        hideSource = !hideSource;
+                        if (hideSource) {
+                          hideRender = false;
+                        }
+                      });
+                    },
+                    child: Text(hideSource ? '显示原文件' : '隐藏原文件'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        hideRender = !hideRender;
+                        if (hideRender) {
+                          hideSource = false;
+                        }
+                      });
+                    },
+                    child: Text(hideRender ? '显示渲染' : '隐藏渲染'),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: MediaQuery.of(dialogContext).size.width * 0.8,
+                height: MediaQuery.of(dialogContext).size.height * 0.7,
+                child: FutureBuilder<String>(
+                  future: _loadMarkdownContent(file),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Center(child: Text('加载失败: ${snapshot.error}'));
+                    }
+                    final content = snapshot.data ?? '';
+                    if (hideSource) {
+                      return _buildMarkdownRenderPanel(content);
+                    }
+                    if (hideRender) {
+                      return _buildMarkdownSourcePanel(content);
+                    }
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth >= 900;
+                        if (isWide) {
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: _buildMarkdownSourcePanel(content),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildMarkdownRenderPanel(content),
+                              ),
+                            ],
+                          );
+                        }
+                        return DefaultTabController(
+                          length: 2,
+                          child: Column(
+                            children: [
+                              const TabBar(
+                                tabs: [
+                                  Tab(text: '原文件'),
+                                  Tab(text: '渲染预览'),
+                                ],
+                              ),
+                              Expanded(
+                                child: TabBarView(
+                                  children: [
+                                    _buildMarkdownSourcePanel(content),
+                                    _buildMarkdownRenderPanel(content),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('关闭'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMarkdownSourcePanel(String content) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Scrollbar(
+        child: SingleChildScrollView(
+          child: SelectableText(
+            content,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMarkdownRenderPanel(String content) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Scrollbar(
+        child: Markdown(
+          data: content,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -375,6 +541,27 @@ class _FileManagementViewState extends State<FileManagementView> {
       itemCount: _files.length,
       itemBuilder: (context, index) {
         final file = _files[index];
+        final fileExtension = path.extension(file.objectName).toLowerCase();
+        final isMarkdown = fileExtension == '.md' || fileExtension == '.markdown';
+        final menuItems = <PopupMenuEntry<String>>[
+          const PopupMenuItem<String>(
+            value: 'download',
+            child: Text('下载最新版本'),
+          ),
+          const PopupMenuItem<String>(
+            value: 'versions',
+            child: Text('查看所有版本'),
+          ),
+          if (isMarkdown)
+            const PopupMenuItem<String>(
+              value: 'preview',
+              child: Text('Markdown 预览'),
+            ),
+          const PopupMenuItem<String>(
+            value: 'delete',
+            child: Text('删除所有版本'),
+          ),
+        ];
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 4),
           child: ExpansionTile(
@@ -404,25 +591,15 @@ class _FileManagementViewState extends State<FileManagementView> {
                         case 'versions':
                           _showFileVersions(file);
                           break;
+                        case 'preview':
+                          _showMarkdownPreview(file);
+                          break;
                         case 'delete':
                           _deleteFile(file);
                           break;
                       }
                     },
-                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'download',
-                        child: Text('下载最新版本'),
-                      ),
-                      const PopupMenuItem<String>(
-                        value: 'versions',
-                        child: Text('查看所有版本'),
-                      ),
-                      const PopupMenuItem<String>(
-                        value: 'delete',
-                        child: Text('删除所有版本'),
-                      ),
-                    ],
+                    itemBuilder: (BuildContext context) => menuItems,
                   ),
                 ],
               ),
