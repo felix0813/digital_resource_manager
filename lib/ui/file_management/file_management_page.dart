@@ -333,72 +333,124 @@ class _FileManagementViewState extends State<FileManagementView> {
     if (!context.mounted) {
       return;
     }
+    var showSource = true;
+    var showPreview = true;
     await showDialog<void>(
       context: context,
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text('Markdown 预览 - ${file.objectName}'),
-          content: SizedBox(
-            width: MediaQuery.of(dialogContext).size.width * 0.8,
-            height: MediaQuery.of(dialogContext).size.height * 0.7,
-            child: FutureBuilder<String>(
-              future: _loadMarkdownContent(file),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('加载失败: ${snapshot.error}'));
-                }
-                final content = snapshot.data ?? '';
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 900;
-                    if (isWide) {
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: _buildMarkdownSourcePanel(content),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildMarkdownRenderPanel(content),
-                          ),
-                        ],
-                      );
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Markdown 预览 - ${file.objectName}'),
+              content: SizedBox(
+                width: MediaQuery.of(dialogContext).size.width * 0.8,
+                height: MediaQuery.of(dialogContext).size.height * 0.7,
+                child: FutureBuilder<String>(
+                  future: _loadMarkdownContent(file),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
                     }
-                    return DefaultTabController(
-                      length: 2,
-                      child: Column(
-                        children: [
-                          const TabBar(
-                            tabs: [
-                              Tab(text: '原文件'),
-                              Tab(text: '渲染预览'),
+                    if (snapshot.hasError) {
+                      return Center(child: Text('加载失败: ${snapshot.error}'));
+                    }
+                    final content = snapshot.data ?? '';
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth >= 900;
+                        if (isWide) {
+                          return Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: showSource
+                                        ? (showPreview
+                                            ? () => setState(() {
+                                                  showSource = false;
+                                                })
+                                            : null)
+                                        : () => setState(() {
+                                              showSource = true;
+                                            }),
+                                    icon: Icon(
+                                      showSource ? Icons.visibility_off : Icons.visibility,
+                                    ),
+                                    label: Text(showSource ? '隐藏原文件' : '显示原文件'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  TextButton.icon(
+                                    onPressed: showPreview
+                                        ? (showSource
+                                            ? () => setState(() {
+                                                  showPreview = false;
+                                                })
+                                            : null)
+                                        : () => setState(() {
+                                              showPreview = true;
+                                            }),
+                                    icon: Icon(
+                                      showPreview ? Icons.visibility_off : Icons.visibility,
+                                    ),
+                                    label: Text(showPreview ? '隐藏预览' : '显示预览'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    if (showSource)
+                                      Expanded(
+                                        child: _buildMarkdownSourcePanel(content),
+                                      ),
+                                    if (showSource && showPreview)
+                                      const SizedBox(width: 16),
+                                    if (showPreview)
+                                      Expanded(
+                                        child: _buildMarkdownRenderPanel(content),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return DefaultTabController(
+                          length: 2,
+                          child: Column(
+                            children: [
+                              const TabBar(
+                                tabs: [
+                                  Tab(text: '原文件'),
+                                  Tab(text: '渲染预览'),
+                                ],
+                              ),
+                              Expanded(
+                                child: TabBarView(
+                                  children: [
+                                    _buildMarkdownSourcePanel(content),
+                                    _buildMarkdownRenderPanel(content),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
-                          Expanded(
-                            child: TabBarView(
-                              children: [
-                                _buildMarkdownSourcePanel(content),
-                                _buildMarkdownRenderPanel(content),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('关闭'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
