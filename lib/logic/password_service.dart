@@ -11,7 +11,7 @@ class PasswordService {
 
   // 获取密码列表
   Future<http.Response> listPasswords(String token) async {
-    final url = Uri.parse('$baseUrl/passwords');
+    final url = Uri.parse('$baseUrl/passwords/list');
     final response = await http.get(
       url,
       headers: {
@@ -23,7 +23,7 @@ class PasswordService {
 
   // 创建新密码
   Future<http.Response> createPassword(PasswordItem password, String token) async {
-    final url = Uri.parse('$baseUrl/passwords');
+    final url = Uri.parse('$baseUrl/passwords/create');
     final response = await http.post(
       url,
       headers: {

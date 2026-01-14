@@ -11,7 +11,7 @@ class GitProjectService {
 
   // 获取项目列表
   Future<http.Response> listProjects(String token) async {
-    final url = Uri.parse('$baseUrl/git-projects');
+    final url = Uri.parse('$baseUrl/git-projects/list');
     final response = await http.get(
       url,
       headers: {
@@ -23,7 +23,7 @@ class GitProjectService {
 
   // 创建新项目
   Future<http.Response> createProject(GitProject project, String token) async {
-    final url = Uri.parse('$baseUrl/git-projects');
+    final url = Uri.parse('$baseUrl/git-projects/create');
     final response = await http.post(
       url,
       headers: {
